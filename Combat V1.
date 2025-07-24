@@ -1,0 +1,276 @@
+-- ReplicatedStorage.Modules.Combat.AttackHandler
+local AttackHandler = {}
+AttackHandler.__index = AttackHandler
+
+local RunService = game:GetService("RunService")
+local Remote = game.ReplicatedStorage.Events.RequestAttack
+
+-- Creates and manages a single hitbox instance
+function AttackHandler.new(player)
+    local self = setmetatable({}, AttackHandler)
+    self.Player = player
+    return self
+end
+
+-- Called by client: spawn hitbox at given CFrame for validation
+function AttackHandler:SpawnHitbox(cframe, timestamp)
+    -- Server-side validation
+    local now = tick()
+    if now - timestamp > 0.5 then return end
+    local char = self.Player.Character
+    if not char or not char.PrimaryPart then return end
+    if (char.PrimaryPart.Position - cframe.Position).Magnitude > 10 then return end
+
+    -- Broadcast to clients to visualize and apply damage
+    game.ReplicatedStorage.Events.ConfirmAttack:FireAllClients(self.Player, cframe)
+end
+
+-- RemoteEvent binding
+Remote.OnServerEvent:Connect(function(player, cframe, timestamp)
+    local handler = AttackHandler.new(player)
+    handler:SpawnHitbox(cframe, timestamp)
+end)
+
+-- ReplicatedStorage.Modules.Combat.ComboSystem
+local ComboSystem = {}
+ComboSystem.__index = ComboSystem
+
+-- Maximum clicks allowed and combo reset time
+ComboSystem.MaxCombos = 3
+ComboSystem.ResetTime = 0.6
+
+function ComboSystem.new()
+    local self = setmetatable({}, ComboSystem)
+    self.Count = 0
+    self.LastClick = 0
+    return self
+end
+
+-- Register a click; returns current combo index (1 to MaxCombos)
+function ComboSystem:RegisterClick()
+    local now = os.clock()
+    if now - self.LastClick > ComboSystem.ResetTime then
+        self.Count = 1
+    else
+        self.Count = math.min(self.Count + 1, ComboSystem.MaxCombos)
+    end
+    self.LastClick = now
+    return self.Count
+end
+
+return ComboSystem
+-- ServerScriptService.Modules.Combat.StaminaManager
+local StaminaManager = {}
+StaminaManager.__index = StaminaManager
+local RunService = game:GetService("RunService")
+local MaxStamina = 100
+local DrainRate = 20     -- per second
+local RegenRate = 15     -- per second
+local ExhaustedThreshold = 0
+
+function StaminaManager.new(humanoid)
+    local self = setmetatable({}, StaminaManager)
+    self.Humanoid = humanoid
+    self.Value = MaxStamina
+    self.IsSprinting = false
+    self.Exhausted = false
+    RunService.Heartbeat:Connect(function(dt) self:Update(dt) end)
+    return self
+end
+
+function StaminaManager:StartSprint()
+    if self.Exhausted then return end
+    self.IsSprinting = true
+    self.Humanoid.WalkSpeed += 6
+end
+
+function StaminaManager:StopSprint()
+    if self.IsSprinting then
+        self.Humanoid.WalkSpeed -= 6
+    end
+    self.IsSprinting = false
+end
+
+function StaminaManager:Update(dt)
+    if self.IsSprinting then
+        self.Value = self.Value - DrainRate * dt
+        if self.Value <= 0 then
+            self.Value, self.Exhausted = 0, true
+            self:StopSprint()
+        end
+    else
+        self.Value = math.min(self.Value + RegenRate * dt, MaxStamina)
+        if self.Value > 10 then
+            self.Exhausted = false
+        end
+    end
+end
+
+return StaminaManager
+-- ReplicatedStorage.Modules.Combat.CooldownManager
+-- ReplicatedStorage.Modules.Combat.CooldownManager
+local CooldownManager = {}
+CooldownManager.__index = CooldownManager
+    local self = setmetatable({}, CooldownManager)
+    self.LastUsed = {}
+    return self
+end
+
+function CooldownManager:CanUse(skillName, cdTime)
+    local now = os.clock()
+    local last = self.LastUsed[skillName] or 0
+    if now - last < cdTime then
+        return false, cdTime - (now - last)
+    end
+    self.LastUsed[skillName] = now
+    return true
+end
+
+return CooldownManager
+local ok, delay = cooldownMgr:CanUse("SwordThrust", 1.2)
+if not ok then return end
+-- ReplicatedStorage.Modules.Combat.AnimationController
+local AnimationController = {}
+AnimationController.__index = AnimationController
+    self.Humanoid = humanoid
+    self.ActiveTracks = {}
+    return self
+end
+
+function AnimationController:PlayAttack(animId)
+    local track = self.Humanoid:LoadAnimation(animId)
+    track:Play()
+    -- Example: listen to Event marker to spawn hitbox exactly at swing apex
+    track:GetMarkerReachedSignal("HitMarker"):Connect(function()
+        self.OnHitMarker(track)  -- bound externally
+    end)
+    self.ActiveTracks[animId] = track
+end
+
+function AnimationController:StopAll()
+    for _, track in pairs(self.ActiveTracks) do
+        track:Stop()
+    end
+    self.ActiveTracks = {}
+end
+
+return AnimationController
+-- ReplicatedStorage.Modules.Combat.VFXController
+local ParticleHandler = require(ReplicatedStorage.Modules.Effectify).ParticleHandler
+
+local VFXController = {}
+VFXController.__index = VFXController
+
+-- ReplicatedStorage.Modules.Combat.VFXController
+local ParticleHandler = require(ReplicatedStorage.Modules.Effectify).ParticleHandler
+    task.delay(1, function()
+        ParticleHandler.Detach({Particles = particles})
+    end)
+end
+
+return VFXController
+-- ReplicatedStorage.Modules.Combat.SFXController
+local SFXController = {}
+SFXController.SoundCache = {}
+
+function SFXController:PlaySound(soundId, parent)
+    local sound = Instance.new("Sound", parent or workspace)
+    sound.SoundId = soundId
+-- ReplicatedStorage.Modules.Combat.SFXController
+local SFXController = {}
+SFXController.SoundCache = {}
+return SFXController
+-- ReplicatedStorage.Modules.Combat.StatusEffectManager
+local Effectify = require(ReplicatedStorage.Modules.Effectify)
+
+local StatusEffectManager = {}
+
+function StatusEffectManager:ApplyEffect(target, typeName)
+    local effect = Effectify.new({
+        Owner = target,
+-- ReplicatedStorage.Modules.Combat.StatusEffectManager
+local Effectify = require(ReplicatedStorage.Modules.Effectify)
+        StackType = "Overlap"
+    })
+    effect:Activate()
+    return effect
+end
+
+return StatusEffectManager
+-- ServerScriptService.Modules.Combat.EnemyAI
+local SmoothChase = require(ReplicatedStorage.Packages.SmoothChase)
+local AI = {}
+AI.__index = AI
+
+function AI.new(npcModel)
+    local self = setmetatable({}, AI)
+    self.NPC = npcModel
+    self.Chase = SmoothChase.new(npcModel)
+-- ServerScriptService.Modules.Combat.EnemyAI
+local SmoothChase = require(ReplicatedStorage.Packages.SmoothChase)
+local AI = {}
+AI.__index = AI
+        return self:FindNearestPlayer()
+    end
+    self.Chase:Start()
+end
+
+function AI:FindNearestPlayer()
+    -- Use region or magnitude check
+    local closest, dist = nil, math.huge
+    for _, player in ipairs(game.Players:GetPlayers()) do
+        if player.Character and player.Character.PrimaryPart then
+            local d = (player.Character.PrimaryPart.Position - self.NPC.PrimaryPart.Position).Magnitude
+            if d < dist then
+                dist, closest = d, player.Character
+            end
+        end
+    end
+    return closest and closest.PrimaryPart
+end
+
+return AI
+-- StarterPlayer.StarterGui.CombatUI.LocalScript
+local player = game.Players.LocalPlayer
+local ui = script.Parent
+local humanoid = player.Character:WaitForChild("Humanoid")
+
+local healthBar = ui.HealthBar
+local staminaBar = ui.StaminaBar
+
+local function updateBar(bar, current, max)
+    local ratio = math.clamp(current/max, 0, 1)
+-- StarterPlayer.StarterGui.CombatUI.LocalScript
+local player = game.Players.LocalPlayer
+local ui = script.Parent
+local humanoid = player.Character:WaitForChild("Humanoid")
+    updateBar(healthBar, humanoid.Health, humanoid.MaxHealth)
+end)
+
+-- StaminaManager fires a BindableEvent or updates an attribute
+player.Character.HumanoidRootPart:GetAttributeChangedSignal("Stamina"):Connect(function()
+    updateBar(staminaBar, player.Character.HumanoidRootPart:GetAttribute("Stamina"), 100)
+end)
+-- StarterPlayer.StarterGui.CombatUI.LocalScript
+local player = game.Players.LocalPlayer
+local ui = script.Parent
+local humanoid = player.Character:WaitForChild("Humanoid")
+
+local healthBar = ui.HealthBar
+local staminaBar = ui.StaminaBar
+
+local function updateBar(bar, current, max)
+    local ratio = math.clamp(current/max, 0, 1)
+    bar.Size = UDim2.fromScale(ratio, 1)
+    -- Tween color based on ratio thresholds
+end
+
+humanoid:GetPropertyChangedSignal("Health"):Connect(function()
+    updateBar(healthBar, humanoid.Health, humanoid.MaxHealth)
+end)
+
+-- StaminaManager fires a BindableEvent or updates an attribute
+player.Character.HumanoidRootPart:GetAttributeChangedSignal("Stamina"):Connect(function()
+    updateBar(staminaBar, player.Character.HumanoidRootPart:GetAttribute("Stamina"), 100)
+end)
+
